@@ -1,0 +1,15 @@
+*.o
+*.zip
+*.swp
+*.tar.gz
+*.tar
+*.tgz
+
+aes-crypt-util
+aes-critp
+fusehello
+fusexmp
+pa5-encfs
+xattr-util
+
+.DS_STORE
