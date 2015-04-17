@@ -10,6 +10,11 @@
 #define _XOPEN_SOURCE 500
 #endif
 
+#ifndef XATTR_USER_PREFIX
+#define XATTR_USER_PREFIX "user."
+#define XATTR_USER_PREFIX_LEN (sizeof (XATTR_USER_PREFIX) - 1)
+#endif
+
 #include <fuse.h>
 #include <linux/limits.h>
 #include <stdlib.h>
@@ -20,16 +25,117 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/time.h>
+#include "aes-crypt.h"
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
 
+const int ENCRYPT = 1;
+const int DECRYPT = 0;
+const int COPY = -1;
+
 char * mirrorDir;
 char * keyPhrase;
+
+int aesCryptUtil(int cryptType, char *passKey, char *inPath, char *outPath){
+// int aesCryptUtil(int cryptType, char *passKey, FILE *inFile, FILE *outFile){
+
+	// Open files
+	FILE* inFile = NULL;
+  FILE* outFile = NULL;
+
+	inFile = fopen(inPath, "rb");
+  if(!inFile){
+    perror("infile fopen error");
+    return EXIT_FAILURE;
+  }
+  outFile = fopen(outPath, "wb+");
+
+  if(!outFile){
+    perror("outfile fopen error");
+    return EXIT_FAILURE;
+  }
+
+  // Encryption
+
+	if(!do_crypt(inFile, outFile, cryptType, passKey)){
+		fprintf(stderr, "do_crypt failed\n");
+  }
+
+  // Cleanup
+  if(fclose(outFile)){
+      perror("outFile fclose error\n");
+  }
+  if(fclose(inFile)){
+		perror("inFile fclose error\n");
+  }
+  return 0;
+}
+
+
+static void setXattr(char* name, char* value, char*path){
+	char* tmpstr = NULL;
+	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
+  if(!tmpstr){
+    perror("malloc of 'tmpstr' error");
+    exit(EXIT_FAILURE);
+  }
+  strcpy(tmpstr, XATTR_USER_PREFIX);
+  strcat(tmpstr, name);
+  /* Set attribute */
+  if(setxattr(path, tmpstr, value, strlen(value), 0)){
+    perror("setxattr error");
+    fprintf(stderr, "path  = %s\n", path);
+    fprintf(stderr, "name  = %s\n", tmpstr);
+    fprintf(stderr, "value = %s\n", value);
+    fprintf(stderr, "size  = %zd\n", strlen(value));
+    exit(EXIT_FAILURE);
+  }
+  /* Cleanup */
+  free(tmpstr);
+}
+
+
+static void getXattr(const char *path, const char *name,
+                 char *value){
+	char* tmpstr = NULL;
+	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
+	if(!tmpstr){
+    perror("malloc of 'tmpstr' error");
+    exit(EXIT_FAILURE);
+  }
+  strcpy(tmpstr, XATTR_USER_PREFIX);
+  strcat(tmpstr, name);
+
+  // get size of value first
+  ssize_t valsize = 0;
+  valsize = getxattr(path, tmpstr, NULL, 0);
+
+  //Now get the vaule
+  char* tmpval = NULL;
+  tmpval = malloc(sizeof(*tmpval)*(valsize+1));
+  if(!tmpval){
+    perror("malloc of 'tmpval' error");
+    exit(EXIT_FAILURE);
+  }
+  valsize = getxattr(path, tmpstr, tmpval, valsize);
+
+  strcpy(value, tmpval);
+
+  /* Cleanup */
+  free(tmpval);
+  free(tmpstr);
+}
+
 
 static void appendPath(char newPath[PATH_MAX], const char* path){
 	strcpy(newPath, mirrorDir);
 	strncat(newPath, path, PATH_MAX);
+}
+
+static void temporaryPath(char newPath[PATH_MAX], char tempPath[PATH_MAX]){
+	strcpy(tempPath, newPath);
+	strncat(tempPath, ".xmp_tmp", PATH_MAX);
 }
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
@@ -86,7 +192,7 @@ static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
-	
+
 	dp = opendir(newPath);
 	if (dp == NULL)
 		return -errno;
@@ -267,12 +373,23 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 {
 	int res;
 
+	fprintf(stdout, "**************************************\n");
+	fprintf(stdout, "opening File\n");
+	fprintf(stdout, "**************************************\n");
+
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	res = open(newPath, fi->flags);
+	char tempPath[PATH_MAX];
+	temporaryPath(newPath, tempPath);
+
+	aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
+
+	res = open(tempPath, fi->flags);
 	if (res == -1)
 		return -errno;
+
+	aesCryptUtil(ENCRYPT, keyPhrase, tempPath, newPath);
 
 	close(res);
 	return 0;
@@ -292,7 +409,18 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	fd = open(newPath, O_RDONLY);
+	char tempPath[PATH_MAX];
+	temporaryPath(newPath, tempPath);
+
+	fprintf(stdout, "**************************************\n");
+	fprintf(stdout, "temppath: %s \n", tempPath);
+	fprintf(stdout, "**************************************\n");
+
+
+	//TODO: check for encryption flag
+	// aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
+
+	fd = open(tempPath, O_RDONLY);
 	if (fd == -1)
 		return -errno;
 
@@ -301,6 +429,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 		res = -errno;
 
 	close(fd);
+
 	return res;
 }
 
@@ -313,8 +442,11 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
+	char tempPath[PATH_MAX];
+	temporaryPath(newPath, tempPath);
+
 	(void) fi;
-	fd = open(newPath, O_WRONLY);
+	fd = open(tempPath, O_WRONLY);
 	if (fd == -1)
 		return -errno;
 
@@ -323,6 +455,8 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 		res = -errno;
 
 	close(fd);
+
+	// aesCryptUtil(ENCRYPT, keyPhrase, newPath, newPath);
 	return res;
 }
 
@@ -361,11 +495,27 @@ static int xmp_create(const char* path, mode_t mode, struct fuse_file_info* fi) 
 
 static int xmp_release(const char *path, struct fuse_file_info *fi)
 {
+	fprintf(stdout, "**************************************\n");
+	fprintf(stdout, "Release File\n");
+	fprintf(stdout, "**************************************\n");
 	/* Just a stub.	 This method is optional and can safely be left
 	   unimplemented */
 
-	(void) path;
+
 	(void) fi;
+
+	char newPath[PATH_MAX];
+	appendPath(newPath, path);
+
+	char tempPath[PATH_MAX];
+	temporaryPath(newPath, tempPath);
+
+	int res;
+
+	res = unlink(tempPath);
+	if (res == -1)
+		return -errno;
+
 	return 0;
 }
 
@@ -465,7 +615,7 @@ void usage(){
 }
 
 int main(int argc, char *argv[])
-{	
+{
 	if(argc <= 3){
 	  usage();
 	  exit(EXIT_FAILURE);
