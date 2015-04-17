@@ -11,5 +11,6 @@ fusehello
 fusexmp
 pa5-encfs
 xattr-util
+/test
 
 .DS_STORE

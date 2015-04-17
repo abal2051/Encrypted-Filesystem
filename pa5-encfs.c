@@ -11,6 +11,7 @@
 #endif
 
 #include <fuse.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,6 +22,9 @@
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
+
+char mirrorDir[256];
+char keyPhrase[256];
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
@@ -384,8 +388,25 @@ static struct fuse_operations xmp_oper = {
 #endif
 };
 
+void usage(){
+	printf("Usage: ./pa5-encfs <key-phrase> <mirror-dir> <mount-point>");
+}
+
 int main(int argc, char *argv[])
 {
+	if(argc < 3){
+	  usage();
+	  exit(EXIT_FAILURE);
+    }
+
+    strncpy(keyPhrase, argv[1], sizeof(keyPhrase));
+    strncpy(mirrorDir, argv[2], sizeof(mirrorDir));
+
+    printf("Key Phrase: %s \n", keyPhrase);
+    printf("Mirror Directory: %s \n", mirrorDir);
+
+    char *fuseArgs[] = {argv[0], argv[3], "-d"}; 
+
 	umask(0);
-	return fuse_main(argc, argv, &xmp_oper, NULL);
+	return fuse_main(2, fuseArgs, &xmp_oper, NULL);
 }
