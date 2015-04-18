@@ -34,70 +34,10 @@ const int COPY = -1;
 char * mirrorDir;
 char * keyPhrase;
 
-
-// static void setXattr(char* name, char* value, char*path){
-// 	char* tmpstr = NULL;
-// 	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
-//   if(!tmpstr){
-//     perror("malloc of 'tmpstr' error");
-//     exit(EXIT_FAILURE);
-//   }
-//   strcpy(tmpstr, XATTR_USER_PREFIX);
-//   strcat(tmpstr, name);
-//   /* Set attribute */
-//   if(setxattr(path, tmpstr, value, strlen(value), 0)){
-//     perror("setxattr error");
-//     fprintf(stderr, "path  = %s\n", path);
-//     fprintf(stderr, "name  = %s\n", tmpstr);
-//     fprintf(stderr, "value = %s\n", value);
-//     fprintf(stderr, "size  = %zd\n", strlen(value));
-//     exit(EXIT_FAILURE);
-//   }
-//   /* Cleanup */
-//   free(tmpstr);
-// }
-
-
-// static void getXattr(const char *path, const char *name,
-//                  char *value){
-// 	char* tmpstr = NULL;
-// 	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
-// 	if(!tmpstr){
-//     perror("malloc of 'tmpstr' error");
-//     exit(EXIT_FAILURE);
-//   }
-//   strcpy(tmpstr, XATTR_USER_PREFIX);
-//   strcat(tmpstr, name);
-
-//   // get size of value first
-//   ssize_t valsize = 0;
-//   valsize = getxattr(path, tmpstr, NULL, 0);
-
-//   //Now get the vaule
-//   char* tmpval = NULL;
-//   tmpval = malloc(sizeof(*tmpval)*(valsize+1));
-//   if(!tmpval){
-//     perror("malloc of 'tmpval' error");
-//     exit(EXIT_FAILURE);
-//   }
-//   valsize = getxattr(path, tmpstr, tmpval, valsize);
-
-//   strcpy(value, tmpval);
-
-//   /* Cleanup */
-//   free(tmpval);
-//   free(tmpstr);
-// }
-
-
+/* function for appending our mirror path to the path name */
 static void appendPath(char newPath[PATH_MAX], const char* path){
 	strcpy(newPath, mirrorDir);
 	strncat(newPath, path, PATH_MAX);
-}
-
-static void temporaryPath(char newPath[PATH_MAX], char tempPath[PATH_MAX]){
-	strcpy(tempPath, newPath);
-	strncat(tempPath, ".xmp_tmp", PATH_MAX);
 }
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
@@ -342,16 +282,9 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	// char tempPath[PATH_MAX];
-	// temporaryPath(newPath, tempPath);
-
-	// aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
-
 	res = open(newPath, fi->flags);
 	if (res == -1)
 		return -errno;
-
-	// aesCryptUtil(ENCRYPT, keyPhrase, tempPath, newPath);
 
 	close(res);
 	return 0;
@@ -364,7 +297,6 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	fprintf(stdout, "Reading File\n");
 	fprintf(stdout, "**************************************\n");
 
-	// int fd;
 	int res;
 
 	(void) fi;
@@ -377,9 +309,12 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	FILE * pFile = fopen (newPath,"r");
 	FILE *tempfile = tmpfile();
 
+	// Get attributes for
 	int value = 0;
 	getxattr(newPath, XATTR_ENCRYPTED, &value, sizeof(value));
 	fprintf(stdout, "XATTR VALUE IS: %d\n", value);
+
+	// Depending on the attribute value, decrypt or copy
 	int action = value ? DECRYPT : COPY;
 	do_crypt(pFile, tempfile, action, keyPhrase);
 
@@ -393,11 +328,9 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	if (res == -1)
 		res = -errno;
 
-	// close(tempfile);
+	// Cleanup
 	fclose(tempfile);
 	fclose(pFile);
-
-	// unlink(nameBuff);
 
 	return res;
 }
@@ -416,35 +349,37 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
+	// Open the file for reading AND writing
 	FILE * pFile = fopen (newPath,"r+");
 	FILE *tempfile = tmpfile();
 
+	// Get Xattr to determin if we need to decrpyt
 	int value = 0;
 	getxattr(newPath, XATTR_ENCRYPTED, &value, sizeof(value));
 	fprintf(stdout, "XATTR VALUE IS: %d\n", value);
+
+	// Depending on the attribute value, decrypt or copy
 	int action = value? DECRYPT: COPY;
 	do_crypt(pFile, tempfile, action, keyPhrase);
 	rewind(pFile);
 
-	// size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
-
+  // Get file descriptor of tempfile to use with pwrite
 	int fd = fileno(tempfile);
 	res = pwrite(fd, buf, size, offset);
 	if (res == -1)
 		res = -errno;
 
+	//Rewind file pointer to start of file for tempfile
 	rewind(tempfile);
 
-	// if action decrypt it will be 0
-	// if copy, it will be -1
+	// Only encrypt if it was a previously encrypted file
 	action = (action == DECRYPT) ?  ENCRYPT : COPY;
 	do_crypt(tempfile, pFile, action, keyPhrase);
 
+	// Cleanup
 	fclose(pFile);
 	fclose(tempfile);
 
-
-	// aesCryptUtil(ENCRYPT, keyPhrase, newPath, newPath);
 	return res;
 }
 
@@ -475,6 +410,7 @@ static int xmp_create(const char* path, mode_t mode, struct fuse_file_info* fi) 
   if(res == -1)
 		return -errno;
 
+	// Encrypt files created in fuse filesystem
 	int encryptValue = 1;
 	int ret = setxattr(newPath, XATTR_ENCRYPTED, &encryptValue, sizeof(encryptValue), 0);
 	if (ret == -1){
@@ -498,18 +434,7 @@ static int xmp_release(const char *path, struct fuse_file_info *fi)
 
 
 	(void) fi;
-
-	char newPath[PATH_MAX];
-	appendPath(newPath, path);
-
-	char tempPath[PATH_MAX];
-	temporaryPath(newPath, tempPath);
-
-	int res;
-
-	res = unlink(tempPath);
-	if (res == -1)
-		return -errno;
+	(void) path;
 
 	return 0;
 }
@@ -619,6 +544,15 @@ int main(int argc, char *argv[])
 
     keyPhrase = argv[1];
     mirrorDir = realpath(argv[2], NULL);
+
+    if (mirrorDir == NULL){
+    	printf("Failed loading mirror directory\n");
+    	exit(EXIT_FAILURE);
+    }
+    if (realpath(argv[3], NULL) == NULL){
+    	printf("Failed loading mount point\n");
+    	exit(EXIT_FAILURE);
+    }
 
     printf("Key Phrase: %s \n", keyPhrase);
     printf("Mirror Directory: %s \n", mirrorDir);
