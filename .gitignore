@@ -12,5 +12,6 @@ fusexmp
 pa5-encfs
 xattr-util
 /test
+/testfrom
 
 .DS_STORE
