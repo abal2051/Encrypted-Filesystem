@@ -37,95 +37,95 @@ const int COPY = -1;
 char * mirrorDir;
 char * keyPhrase;
 
-int aesCryptUtil(int cryptType, char *passKey, char *inPath, char *outPath){
-// int aesCryptUtil(int cryptType, char *passKey, FILE *inFile, FILE *outFile){
+// int aesCryptUtil(int cryptType, char *passKey, char *inPath, char *outPath){
+// // int aesCryptUtil(int cryptType, char *passKey, FILE *inFile, FILE *outFile){
 
-	// Open files
-	FILE* inFile = NULL;
-  FILE* outFile = NULL;
+// 	// Open files
+// 	FILE* inFile = NULL;
+//   FILE* outFile = NULL;
 
-	inFile = fopen(inPath, "rb");
-  if(!inFile){
-    perror("infile fopen error");
-    return EXIT_FAILURE;
-  }
-  outFile = fopen(outPath, "wb+");
+// 	inFile = fopen(inPath, "rb");
+//   if(!inFile){
+//     perror("infile fopen error");
+//     return EXIT_FAILURE;
+//   }
+//   outFile = fopen(outPath, "wb+");
 
-  if(!outFile){
-    perror("outfile fopen error");
-    return EXIT_FAILURE;
-  }
+//   if(!outFile){
+//     perror("outfile fopen error");
+//     return EXIT_FAILURE;
+//   }
 
-  // Encryption
+//   // Encryption
 
-	if(!do_crypt(inFile, outFile, cryptType, passKey)){
-		fprintf(stderr, "do_crypt failed\n");
-  }
+// 	if(!do_crypt(inFile, outFile, cryptType, passKey)){
+// 		fprintf(stderr, "do_crypt failed\n");
+//   }
 
-  // Cleanup
-  if(fclose(outFile)){
-      perror("outFile fclose error\n");
-  }
-  if(fclose(inFile)){
-		perror("inFile fclose error\n");
-  }
-  return 0;
-}
-
-
-static void setXattr(char* name, char* value, char*path){
-	char* tmpstr = NULL;
-	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
-  if(!tmpstr){
-    perror("malloc of 'tmpstr' error");
-    exit(EXIT_FAILURE);
-  }
-  strcpy(tmpstr, XATTR_USER_PREFIX);
-  strcat(tmpstr, name);
-  /* Set attribute */
-  if(setxattr(path, tmpstr, value, strlen(value), 0)){
-    perror("setxattr error");
-    fprintf(stderr, "path  = %s\n", path);
-    fprintf(stderr, "name  = %s\n", tmpstr);
-    fprintf(stderr, "value = %s\n", value);
-    fprintf(stderr, "size  = %zd\n", strlen(value));
-    exit(EXIT_FAILURE);
-  }
-  /* Cleanup */
-  free(tmpstr);
-}
+//   // Cleanup
+//   if(fclose(outFile)){
+//       perror("outFile fclose error\n");
+//   }
+//   if(fclose(inFile)){
+// 		perror("inFile fclose error\n");
+//   }
+//   return 0;
+// }
 
 
-static void getXattr(const char *path, const char *name,
-                 char *value){
-	char* tmpstr = NULL;
-	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
-	if(!tmpstr){
-    perror("malloc of 'tmpstr' error");
-    exit(EXIT_FAILURE);
-  }
-  strcpy(tmpstr, XATTR_USER_PREFIX);
-  strcat(tmpstr, name);
+// static void setXattr(char* name, char* value, char*path){
+// 	char* tmpstr = NULL;
+// 	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
+//   if(!tmpstr){
+//     perror("malloc of 'tmpstr' error");
+//     exit(EXIT_FAILURE);
+//   }
+//   strcpy(tmpstr, XATTR_USER_PREFIX);
+//   strcat(tmpstr, name);
+//   /* Set attribute */
+//   if(setxattr(path, tmpstr, value, strlen(value), 0)){
+//     perror("setxattr error");
+//     fprintf(stderr, "path  = %s\n", path);
+//     fprintf(stderr, "name  = %s\n", tmpstr);
+//     fprintf(stderr, "value = %s\n", value);
+//     fprintf(stderr, "size  = %zd\n", strlen(value));
+//     exit(EXIT_FAILURE);
+//   }
+//   /* Cleanup */
+//   free(tmpstr);
+// }
 
-  // get size of value first
-  ssize_t valsize = 0;
-  valsize = getxattr(path, tmpstr, NULL, 0);
 
-  //Now get the vaule
-  char* tmpval = NULL;
-  tmpval = malloc(sizeof(*tmpval)*(valsize+1));
-  if(!tmpval){
-    perror("malloc of 'tmpval' error");
-    exit(EXIT_FAILURE);
-  }
-  valsize = getxattr(path, tmpstr, tmpval, valsize);
+// static void getXattr(const char *path, const char *name,
+//                  char *value){
+// 	char* tmpstr = NULL;
+// 	tmpstr = malloc(strlen(name) + XATTR_USER_PREFIX_LEN + 1);
+// 	if(!tmpstr){
+//     perror("malloc of 'tmpstr' error");
+//     exit(EXIT_FAILURE);
+//   }
+//   strcpy(tmpstr, XATTR_USER_PREFIX);
+//   strcat(tmpstr, name);
 
-  strcpy(value, tmpval);
+//   // get size of value first
+//   ssize_t valsize = 0;
+//   valsize = getxattr(path, tmpstr, NULL, 0);
 
-  /* Cleanup */
-  free(tmpval);
-  free(tmpstr);
-}
+//   //Now get the vaule
+//   char* tmpval = NULL;
+//   tmpval = malloc(sizeof(*tmpval)*(valsize+1));
+//   if(!tmpval){
+//     perror("malloc of 'tmpval' error");
+//     exit(EXIT_FAILURE);
+//   }
+//   valsize = getxattr(path, tmpstr, tmpval, valsize);
+
+//   strcpy(value, tmpval);
+
+//   /* Cleanup */
+//   free(tmpval);
+//   free(tmpstr);
+// }
 
 
 static void appendPath(char newPath[PATH_MAX], const char* path){
@@ -380,16 +380,16 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	char tempPath[PATH_MAX];
-	temporaryPath(newPath, tempPath);
+	// char tempPath[PATH_MAX];
+	// temporaryPath(newPath, tempPath);
 
-	aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
+	// aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
 
-	res = open(tempPath, fi->flags);
+	res = open(newPath, fi->flags);
 	if (res == -1)
 		return -errno;
 
-	aesCryptUtil(ENCRYPT, keyPhrase, tempPath, newPath);
+	// aesCryptUtil(ENCRYPT, keyPhrase, tempPath, newPath);
 
 	close(res);
 	return 0;
@@ -399,36 +399,42 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 		    struct fuse_file_info *fi)
 {
 	fprintf(stdout, "**************************************\n");
-	fprintf(stdout, "path: %s \n", path);
+	fprintf(stdout, "Reading File\n");
 	fprintf(stdout, "**************************************\n");
-	int fd;
+
+	// int fd;
 	int res;
 
 	(void) fi;
+	(void) offset;
 
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	char tempPath[PATH_MAX];
-	temporaryPath(newPath, tempPath);
+	// Open file and Create Tempfile
+	FILE * pFile = fopen (newPath,"r");
+	FILE *tempfile = tmpfile();
 
-	fprintf(stdout, "**************************************\n");
-	fprintf(stdout, "temppath: %s \n", tempPath);
-	fprintf(stdout, "**************************************\n");
+	//if newpath has attribute:
+	//then decrypt file
+	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
+	fseek(tempfile, SEEK_SET, 0);
+	//TODO: else:
+	//copy file to tempfile
+	// do_crypt(file, tempfile, COPY, keyPhrase);
+	//
 
-
-	//TODO: check for encryption flag
-	// aesCryptUtil(DECRYPT, keyPhrase, newPath, tempPath);
-
-	fd = open(tempPath, O_RDONLY);
-	if (fd == -1)
-		return -errno;
-
-	res = pread(fd, buf, size, offset);
+	// size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+	// ptr = buffer, size = block size, nmemb = number of blocks
+	res = fread(buf, 1, size, tempfile);
 	if (res == -1)
 		res = -errno;
 
-	close(fd);
+	// close(tempfile);
+	fclose(tempfile);
+	fclose(pFile);
+
+	// unlink(nameBuff);
 
 	return res;
 }
