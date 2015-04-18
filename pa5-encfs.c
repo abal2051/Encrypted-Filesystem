@@ -418,7 +418,8 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	//if newpath has attribute:
 	//then decrypt file
 	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
-
+	rewind(tempfile);
+	rewind(pFile);
 	//TODO: else:
 	//copy file to tempfile
 	// do_crypt(file, tempfile, COPY, keyPhrase);
@@ -442,25 +443,37 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 static int xmp_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
-	int fd;
+	fprintf(stdout, "**************************************\n");
+	fprintf(stdout, "Writing File\n");
+	fprintf(stdout, "**************************************\n");
+
 	int res;
+	(void) offset;
+	(void) fi;
 
 	char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-	char tempPath[PATH_MAX];
-	temporaryPath(newPath, tempPath);
+	FILE * pFile = fopen (newPath,"r+");
+	FILE *tempfile = tmpfile();
 
-	(void) fi;
-	fd = open(tempPath, O_WRONLY);
-	if (fd == -1)
-		return -errno;
+	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
+	rewind(pFile);
 
+	// size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+
+	int fd = fileno(tempfile);
 	res = pwrite(fd, buf, size, offset);
 	if (res == -1)
 		res = -errno;
 
-	close(fd);
+	rewind(tempfile);
+
+	do_crypt(tempfile, pFile, ENCRYPT, keyPhrase);
+
+	fclose(pFile);
+	fclose(tempfile);
+
 
 	// aesCryptUtil(ENCRYPT, keyPhrase, newPath, newPath);
 	return res;
