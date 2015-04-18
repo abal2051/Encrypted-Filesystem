@@ -10,10 +10,7 @@
 #define _XOPEN_SOURCE 500
 #endif
 
-#ifndef XATTR_USER_PREFIX
-#define XATTR_USER_PREFIX "user."
-#define XATTR_USER_PREFIX_LEN (sizeof (XATTR_USER_PREFIX) - 1)
-#endif
+#define XATTR_ENCRYPTED "user.encrypted"
 
 #include <fuse.h>
 #include <linux/limits.h>
@@ -36,41 +33,6 @@ const int COPY = -1;
 
 char * mirrorDir;
 char * keyPhrase;
-
-// int aesCryptUtil(int cryptType, char *passKey, char *inPath, char *outPath){
-// // int aesCryptUtil(int cryptType, char *passKey, FILE *inFile, FILE *outFile){
-
-// 	// Open files
-// 	FILE* inFile = NULL;
-//   FILE* outFile = NULL;
-
-// 	inFile = fopen(inPath, "rb");
-//   if(!inFile){
-//     perror("infile fopen error");
-//     return EXIT_FAILURE;
-//   }
-//   outFile = fopen(outPath, "wb+");
-
-//   if(!outFile){
-//     perror("outfile fopen error");
-//     return EXIT_FAILURE;
-//   }
-
-//   // Encryption
-
-// 	if(!do_crypt(inFile, outFile, cryptType, passKey)){
-// 		fprintf(stderr, "do_crypt failed\n");
-//   }
-
-//   // Cleanup
-//   if(fclose(outFile)){
-//       perror("outFile fclose error\n");
-//   }
-//   if(fclose(inFile)){
-// 		perror("inFile fclose error\n");
-//   }
-//   return 0;
-// }
 
 
 // static void setXattr(char* name, char* value, char*path){
@@ -415,15 +377,15 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	FILE * pFile = fopen (newPath,"r");
 	FILE *tempfile = tmpfile();
 
-	//if newpath has attribute:
-	//then decrypt file
-	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
+	int value = 0;
+	getxattr(newPath, XATTR_ENCRYPTED, &value, sizeof(value));
+	fprintf(stdout, "XATTR VALUE IS: %d\n", value);
+	int action = value ? DECRYPT : COPY;
+	do_crypt(pFile, tempfile, action, keyPhrase);
+
+	// Move pointer back to head of files.
 	rewind(tempfile);
 	rewind(pFile);
-	//TODO: else:
-	//copy file to tempfile
-	// do_crypt(file, tempfile, COPY, keyPhrase);
-	//
 
 	// size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 	// ptr = buffer, size = block size, nmemb = number of blocks
@@ -457,7 +419,11 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 	FILE * pFile = fopen (newPath,"r+");
 	FILE *tempfile = tmpfile();
 
-	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
+	int value = 0;
+	getxattr(newPath, XATTR_ENCRYPTED, &value, sizeof(value));
+	fprintf(stdout, "XATTR VALUE IS: %d\n", value);
+	int action = value? DECRYPT: COPY;
+	do_crypt(pFile, tempfile, action, keyPhrase);
 	rewind(pFile);
 
 	// size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
@@ -469,7 +435,10 @@ static int xmp_write(const char *path, const char *buf, size_t size,
 
 	rewind(tempfile);
 
-	do_crypt(tempfile, pFile, ENCRYPT, keyPhrase);
+	// if action decrypt it will be 0
+	// if copy, it will be -1
+	action = (action == DECRYPT) ?  ENCRYPT : COPY;
+	do_crypt(tempfile, pFile, action, keyPhrase);
 
 	fclose(pFile);
 	fclose(tempfile);
@@ -495,20 +464,27 @@ static int xmp_statfs(const char *path, struct statvfs *stbuf)
 
 static int xmp_create(const char* path, mode_t mode, struct fuse_file_info* fi) {
 
-    (void) fi;
+  (void) fi;
 
-    int res;
+  int res;
 
-    char newPath[PATH_MAX];
+  char newPath[PATH_MAX];
 	appendPath(newPath, path);
 
-    res = creat(newPath, mode);
-    if(res == -1)
-	return -errno;
+  res = creat(newPath, mode);
+  if(res == -1)
+		return -errno;
 
-    close(res);
+	int encryptValue = 1;
+	int ret = setxattr(newPath, XATTR_ENCRYPTED, &encryptValue, sizeof(encryptValue), 0);
+	if (ret == -1){
+		fprintf(stdout, "THE VALUE ENCODING FAILED\n");
+		return -errno;
+	}
 
-    return 0;
+  close(res);
+
+  return 0;
 }
 
 
@@ -560,6 +536,7 @@ static int xmp_setxattr(const char *path, const char *name, const char *value,
 	int res = lsetxattr(newPath, name, value, size, flags);
 	if (res == -1)
 		return -errno;
+
 	return 0;
 }
 
