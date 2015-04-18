@@ -418,7 +418,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	//if newpath has attribute:
 	//then decrypt file
 	do_crypt(pFile, tempfile, DECRYPT, keyPhrase);
-	fseek(tempfile, SEEK_SET, 0);
+
 	//TODO: else:
 	//copy file to tempfile
 	// do_crypt(file, tempfile, COPY, keyPhrase);
